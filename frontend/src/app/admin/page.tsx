@@ -3,15 +3,17 @@
 import { useState, useEffect } from 'react';
 import DashboardCharts from '@/components/DashboardCharts';
 import Loader from '@/components/Loader';
+import { io } from 'socket.io-client';
 
 export default function AdminDashboard() {
   const [crowdData, setCrowdData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
 
   useEffect(() => {
+    // Initial fetch
     const fetchData = async () => {
       try {
-        // Authenticated request to backend in production
         const res = await fetch('http://localhost:5000/api/crowd-status');
         const json = await res.json();
         setCrowdData(json.data);
@@ -22,11 +24,23 @@ export default function AdminDashboard() {
       }
     };
     fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
+
+    // WebSocket Real-Time connection
+    const socket = io('http://localhost:5000');
+    
+    socket.on('connect', () => console.log('Admin connected to real-time stream'));
+    
+    socket.on('live_update', (data) => {
+      setCrowdData(data);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   const handleSendAlert = async () => {
+    setIsBroadcasting(true);
     try {
       await fetch('http://localhost:5000/api/admin/alerts', {
         method: 'POST',
@@ -36,10 +50,12 @@ export default function AdminDashboard() {
         },
         body: JSON.stringify({ message: 'Please use East Gate, Main Entrance is congested.', severity: 'high' })
       });
-      alert('Alert broadcasted securely to all attendees.');
+      alert('Alert broadcasted securely to all attendees via WebSockets.');
     } catch (e) {
       console.error(e);
       alert('Failed to send alert');
+    } finally {
+      setIsBroadcasting(false);
     }
   };
 
@@ -55,9 +71,9 @@ export default function AdminDashboard() {
 
       <main style={{ flex: 1, padding: '32px', overflowY: 'auto' }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
-          <h2>Live Venue Analytics</h2>
-          <button className="btn-primary" onClick={handleSendAlert} style={{ background: 'var(--accent-danger)' }} aria-label="Broadcast Emergency Alert">
-            Broadcast Emergency Alert
+          <h2>Live Venue Analytics <span className="badge badge-success" style={{ fontSize: '12px', marginLeft: '12px' }}>Live via WebSockets</span></h2>
+          <button className="btn-primary" onClick={handleSendAlert} disabled={isBroadcasting} style={{ background: 'var(--accent-danger)' }} aria-label="Broadcast Emergency Alert">
+            {isBroadcasting ? 'Broadcasting...' : 'Broadcast Emergency Alert'}
           </button>
         </header>
 
@@ -75,7 +91,7 @@ export default function AdminDashboard() {
         </div>
 
         <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column' }}>
-          <h3 style={{ marginBottom: '16px' }}>Zone Density Analytics</h3>
+          <h3 style={{ marginBottom: '16px' }}>Zone Density Analytics (Real-Time)</h3>
           {loading ? <Loader text="Loading live analytics..." /> : <DashboardCharts data={crowdData?.densities || []} />}
         </div>
       </main>

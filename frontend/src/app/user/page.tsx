@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react';
 import VenueMap from '@/components/Map';
 import Loader from '@/components/Loader';
 import { AlertTriangle, Clock, MapPin, Activity } from 'lucide-react';
+import { io } from 'socket.io-client';
 
 export default function UserPortal() {
   const [crowdData, setCrowdData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Initial fetch
     const fetchData = async () => {
       try {
         const res = await fetch('http://localhost:5000/api/crowd-status');
@@ -21,17 +23,35 @@ export default function UserPortal() {
         setLoading(false);
       }
     };
-    
     fetchData();
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
+
+    // WebSocket Real-Time connection
+    const socket = io('http://localhost:5000');
+    
+    socket.on('connect', () => console.log('Connected to real-time stream'));
+    
+    socket.on('live_update', (data) => {
+      setCrowdData(data);
+    });
+
+    socket.on('emergency_alert', (alertData) => {
+      // Prepend the new alert
+      setCrowdData((prev: any) => ({
+        ...prev,
+        alerts: [alertData.message, ...(prev?.alerts || [])]
+      }));
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   return (
     <div className="container" style={{ paddingTop: '2rem', paddingBottom: '2rem' }}>
       <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Attendee Portal</h2>
-        <span className="badge badge-success" aria-label="Status: Live Tracking Active">Live Tracking Active</span>
+        <span className="badge badge-success" aria-label="Status: Live Tracking Active">Live Tracking Active (Socket.io)</span>
       </header>
 
       {crowdData?.alerts?.length > 0 && (
