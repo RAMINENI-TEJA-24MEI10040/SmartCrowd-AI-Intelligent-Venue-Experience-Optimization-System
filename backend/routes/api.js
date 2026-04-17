@@ -1,20 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const venueController = require('../controllers/venueController');
+const { validate, schemas } = require('../middleware/validate');
+const firebaseAuth = require('../middleware/firebaseAuth');
 
-// In a real app, you would add auth middleware here
-// const auth = require('../middleware/auth');
-
-// Get venue layout and zones
+// Public routes
 router.get('/venue', venueController.getVenueLayout);
-
-// Get real-time crowd data (this bridges to the Python AI service)
 router.get('/crowd-status', venueController.getCrowdStatus);
 
-// Admin: Send an alert
-router.post('/admin/alerts', venueController.sendAlert);
+// Protected routes (requires Firebase JWT)
+// Using firebaseAuth middleware for these endpoints
+router.post('/route', firebaseAuth, validate(schemas.routeSchema), venueController.getOptimalRoute);
 
-// Get optimal route
-router.post('/route', venueController.getOptimalRoute);
+// Admin routes (would check role in production, using auth for now)
+router.post('/admin/alerts', firebaseAuth, validate(schemas.alertSchema), venueController.sendAlert);
 
 module.exports = router;
